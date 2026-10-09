@@ -58,18 +58,23 @@ As telas são montadas como texto HTML e colocadas em `#app`. Não há framework
 ### Dados salvos
 
 - `localStorage["ficha-forte-v1"]`: o estado `S`.
-  - `profile`: nome, sexo, idade, peso, altura, objetivo, nivel, dias, tempo, local, foco, evita.
+  - `profile`: nome, sexo, `nasc` (data de nascimento, `aaaa-mm-dd`), idade, peso, altura, objetivo, nivel, dias, tempo, local, foco, evita e, se o treinador tirou algum exercício, `evitaEx` (lista de `id`).
+    - A pessoa digita a data como dd/mm/aaaa. Com `nasc`, a função `syncAge` refaz `idade` toda vez que a tela é montada, então a idade se atualiza sozinha no aniversário. O resto do app continua lendo `profile.idade`.
+    - Perfis antigos não têm `nasc` e continuam usando a `idade` que foi digitada, até a pessoa preencher a data em Meus dados.
+  - `memo`: o que o treinador com IA anotou sobre a pessoa (`id`, `d` data, `t` texto). No máximo 30.
   - `plan`: lista de dias, cada um com `nome`, `foco`, `itens` (`ex`, `slot`, `series`, `reps`, `desc`) e `nota`.
   - `next`: índice do próximo treino.
   - `draft`: séries do treino em andamento, por dia e por exercício (`kg`, `reps`, `ok`).
   - `logs`: histórico por exercício (`d` com a data e `sets` com `kg` e `reps`).
-  - `done`: treinos concluídos (`d` data, `n` nome; os novos também têm `s` séries e `v` peso total, usados para comparar no resumo). `pesos`: peso anotado por data. `chat`: conversa com o treinador. `analise`: última análise da IA.
+  - `done`: treinos concluídos (`d` data, `n` nome; os novos também têm `s` séries e `v` peso total, usados para comparar no resumo). `pesos`: peso anotado por data. `chat`: conversa com o treinador (`r` quem fala, `t` texto; nas respostas em que a IA mudou algo, `acts` com as mudanças e `undone` se foram desfeitas). `analise`: última análise da IA.
   - `start`: hora em que cada treino em andamento começou, para mostrar o tempo no resumo. Os dados antigos não têm esse campo e abrem normalmente.
 - `localStorage["ficha-forte-cfg"]`: chave API, Workspace ID e modelo. Não entra no backup.
 
 ### Montagem do treino
 
-- `EX` tem 42 exercícios. Campos: `id`, `n` (nome), `g` (grupo), `s` (em quais vagas ele cabe), `a` (animação), `eq` (`bar`, `db`, `hd` ou nada), `w` (onde dá para fazer: `G` academia, `D` casa com halteres, `B` sem equipamento), `av` (dores que ele evita), `min` (nível mínimo), `t` (por tempo), `bw` (sem carga), `tips`.
+- `EX` tem 42 exercícios. Campos: `id`, `n` (nome), `g` (grupo), `s` (em quais vagas ele cabe), `a` (animação), `eq` (`bar`, `db`, `hd` ou nada), `w` (onde dá para fazer: `G` academia, `D` casa com halteres, `B` sem equipamento), `av` (dores que ele evita), `min` (nível mínimo), `t` (por tempo), `bw` (sem carga), `ng` e `pf` (como o halter aparece, ver Boneco animado), `tips`.
+- `buildPlan` nunca usa os exercícios de `profile.evitaEx`.
+- Ao salvar Meus dados, o app compara o treino que sairia dos dados antigos com o dos novos. Se for igual (mudou só nome, sexo ou peso), o treino atual fica, com as trocas que a pessoa fez. Se for diferente e houver treino em andamento, ele avisa antes e pede para tocar em salvar de novo. Peso novo entra no gráfico da Evolução.
 - `XTRA` completa cada exercício com: texto de pegada e posição, músculos principais, músculos que ajudam e a animação do segundo ângulo.
 - `TPL` são os modelos de dia (lista de vagas, como `quad`, `push_h`, `pull_v`). `splitFor` escolhe os dias conforme dias por semana, nível e foco. `buildPlan` preenche cada vaga com um exercício que serve para o local e as dores da pessoa.
 - `prescr` define séries, repetições e descanso conforme objetivo, nível e idade.
@@ -80,16 +85,22 @@ As telas são montadas como texto HTML e colocadas em `#app`. Não há framework
 - Cada animação em `ANIMS` tem uma lista `K` de poses. Cada pose tem pontos em uma tela de 200 por 160: `H` (quadril), `S` (ombro), `h` (mão), `f` (tornozelo) e opcionais `h2`, `f2`, `toe`, `al`, `ll`. Uma pose só precisa dizer o que muda em relação à anterior.
 - Cotovelo e joelho são calculados pela função `ik`. `eh` e `kh` dizem para que lado eles dobram.
 - Braço mede 17 + 17 e perna 24 + 24. Se a mão ou o pé ficarem mais perto que isso, o membro dobra. Para manter esticado em um movimento em arco, ponha o alvo um pouco além do alcance e use mais poses no caminho.
-- `front:1` (pelo atalho `...FV`) é vista de frente: só se define o lado esquerdo e o direito é espelhado. `lbl:'De cima'` troca o nome do botão.
-- `sc` é o cenário (banco, cabo, barra fixa).
+- `front:1` (pelo atalho `...FV`) é vista de frente: só se define o lado esquerdo e o direito é espelhado. Com `own:1` os dois lados são diferentes e `h2`, `f2`, `toe2` vêm prontos (remada com um halter, afundo, búlgaro, coice). `lbl` troca o nome do botão (`'De cima'`, `'De costas'`).
+- Opções de pose para dar profundidade: `al` e `ll` encurtam braço e perna que apontam para quem olha (`al2` e `ll2` só o lado direito), `hd` encurta o pescoço quando o tronco vem na direção de quem olha.
+- Opções da vista de frente: `back` (de costas: só cabelo e músculos das costas), `hair` (só o alto da cabeça, pessoa olhando para o chão), `noHip` (esconde quadril e pernas, vista a partir da cabeça), `legsFront` (pernas na frente do corpo, vista a partir dos pés), `armsBehind` (braços atrás do corpo), `far` (tronco desenhado menor, longe), `one` (só a mão direita segura o peso), `zoom` (amplia desenhos rentes ao chão).
+- `sc` é o cenário: `l` linha, `r` retângulo, `c` círculo, `cable` e `cable2` cabo até a mão, `cablemid` cabo até o meio das mãos, `plat` plataforma do leg press, `pad` rolo no tornozelo (vista de lado), `roll` rolo atravessando os dois tornozelos (vista de frente ou de cima).
 - O boneco é desenhado por partes (pele, short, tênis, cabelo) e os músculos do exercício aparecem em vermelho (principal) e laranja (ajuda).
-- 12 exercícios têm segundo ângulo (campo `a2`). Onde a segunda vista confundia, ela foi tirada de propósito: stiff, remada curvada, flexões, desenvolvimento e tríceps na polia.
+- Halter: por padrão aparece como bolinha. `ng:1` (pegada neutra) faz ele aparecer comprido na vista de lado. `pf:1` faz ele aparecer comprido na vista de frente e de cima.
+- Todos os 42 exercícios têm segundo ângulo (campo `a2`, quarto item de `XTRA`). Os vistos rente ao chão (ponte, elevação pélvica, abdominal, elevação de pernas, flexões, prancha, super-homem) são os mais difíceis de ler nesse desenho plano e ficaram mais simples.
 
 ### Treinador com IA
 
 - Chama `https://api.anthropic.com/v1/messages` direto do navegador, com a chave do usuário e o cabeçalho `anthropic-dangerous-direct-browser-access`.
 - Modelos no seletor: `claude-sonnet-5-5` (padrão), `claude-haiku-4-5-20251001`, `claude-opus-5-5`.
-- `aiSystem` monta as instruções e manda junto os dados da pessoa, o treino e o histórico.
+- `aiSystem` monta as instruções e manda junto os dados da pessoa, as anotações, os exercícios evitados, o treino (com `id`), a lista de exercícios do app e o histórico.
+- Na conversa, a IA tem ferramentas (`TOOLS`): `anotar`, `esquecer_anotacao`, `evitar_exercicio` (tira do plano e coloca outro parecido) e `liberar_exercicio`. `runTool` executa, `undoAct` desfaz e `actTxt` escreve a linha que aparece embaixo da resposta. `sendChat` dá até 4 voltas: a IA pede a ferramenta, o app executa e devolve o resultado.
+- Cada resposta que mudou algo mostra o que mudou e um botão Desfazer. Em Meus dados, o cartão "O que o treinador sabe sobre você" deixa apagar anotações e liberar exercícios.
+- A análise da Evolução e o teste da chave não usam ferramentas.
 - É o mesmo esquema do app Diário Nutri (pasta `..\diario-nutri`).
 
 ## Como testar antes de publicar
@@ -115,9 +126,9 @@ Depois de publicar, abrir o link com `?v=numero` no fim para fugir do cache e co
 
 ## O que já se sabe que pode melhorar
 
-- O treinador com IA foi testado só com resposta simulada. Falta confirmar com a chave de verdade.
+- O treinador com IA (inclusive as ferramentas de anotar e trocar exercício) foi testado só com resposta simulada. Falta confirmar com a chave de verdade.
 - O histórico da versão antiga (a página de dentro do Claude) não veio para o app publicado.
-- Alguns bonecos ainda são simples: mesa flexora, remada baixa, puxada de lado e crucifixo na polia.
+- Os segundos ângulos vistos rente ao chão (ponte, elevação pélvica, abdominal, flexões, prancha, super-homem) ficaram pequenos e simples. O desenho é plano, sem perspectiva, e esses ângulos são os mais difíceis.
 - As cargas iniciais são estimativas conservadoras. Vale ajustar a tabela `START` conforme o uso real.
 - Não há sincronização entre aparelhos. A saída hoje é o backup em arquivo, em Meus dados.
 
